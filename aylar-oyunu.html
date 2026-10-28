@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ayların İngilizcesi</title>
+<style>
+  :root{
+    --bg:#eef3f1; --card:#ffffff; --ink:#1d2b2a; --muted:#5d6f6c;
+    --ok:#1f8a4c; --okbg:#e3f4ea; --bad:#c23b3b; --badbg:#fbe8e8;
+    --accent:#2a5d6b; --line:#d3dedb;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{--bg:#121b1a;--card:#1b2827;--ink:#e6efed;--muted:#9bb0ac;--ok:#59d08a;--okbg:#17352469;--bad:#ff8a8a;--badbg:#3a1e1e;--accent:#7cc3d4;--line:#2d3f3d}
+  }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:var(--bg);color:var(--ink);font-family:Georgia,"Times New Roman",serif;padding:16px}
+  .card{width:100%;max-width:520px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:28px}
+  h1{margin:0 0 4px;font-size:1.5rem}
+  .sub{color:var(--muted);margin:0 0 20px;font-size:.95rem}
+  .bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-bottom:8px}
+  .bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s}
+  .count{font-size:.85rem;color:var(--muted);margin-bottom:18px}
+  .tr{font-size:2.4rem;text-align:center;margin:10px 0 18px;font-weight:bold;color:var(--accent)}
+  input{width:100%;font:inherit;font-size:1.2rem;padding:12px 14px;border:2px solid var(--line);border-radius:8px;
+    background:var(--bg);color:var(--ink);outline:none}
+  input:focus{border-color:var(--accent)}
+  input:disabled{opacity:.8}
+  button{font:inherit;font-size:1rem;margin-top:12px;width:100%;padding:12px;border:0;border-radius:8px;
+    background:var(--accent);color:#fff;cursor:pointer}
+  button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+  .fb{margin-top:14px;padding:12px 14px;border-radius:8px;min-height:24px;font-size:1.05rem;display:none}
+  .fb.ok{display:block;background:var(--okbg);color:var(--ok)}
+  .fb.bad{display:block;background:var(--badbg);color:var(--bad)}
+  .score{font-size:1.2rem;margin:6px 0 16px}
+  table{width:100%;border-collapse:collapse;font-size:.95rem}
+  th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
+  th{color:var(--muted);font-weight:normal;font-size:.85rem}
+  td.mark{font-weight:bold;width:36px}
+  tr.ok td.mark{color:var(--ok)} tr.bad td.mark{color:var(--bad)}
+  .yours{color:var(--bad);text-decoration:line-through}
+  .empty{color:var(--muted);font-style:italic}
+  .timer{font-size:3rem;font-weight:bold;text-align:center;color:var(--accent);margin:0 0 12px}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<main class="card">
+  <section id="study" class="hidden">
+    <h1>Önce bir göz at</h1>
+    <p class="sub">Oyun başlamadan ayları ezberle.</p>
+    <div class="timer" id="timer">10</div>
+    <table>
+      <thead><tr><th>Türkçe</th><th>İngilizce</th></tr></thead>
+      <tbody id="studyRows"></tbody>
+    </table>
+  </section>
+
+  <section id="game" class="hidden">
+    <h1>Ayların İngilizcesi</h1>
+    <p class="sub">Türkçe ayı gör, İngilizcesini yaz.</p>
+    <div class="bar"><i id="bar"></i></div>
+    <div class="count" id="count"></div>
+    <div class="tr" id="tr"></div>
+    <input id="answer" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="İngilizce cevap">
+    <button id="check">Kontrol et</button>
+    <div class="fb" id="fb" role="status" aria-live="polite"></div>
+  </section>
+
+  <section id="result" class="hidden">
+    <h1>Sonuçlar</h1>
+    <div class="score" id="score"></div>
+    <table>
+      <thead><tr><th></th><th>İngilizce</th><th>Türkçe</th><th>Senin cevabın</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <button id="again">Tekrar oyna</button>
+  </section>
+</main>
+
+<script>
+const MONTHS = [
+  ["January","Ocak"],["February","Şubat"],["March","Mart"],["April","Nisan"],
+  ["May","Mayıs"],["June","Haziran"],["July","Temmuz"],["August","Ağustos"],
+  ["September","Eylül"],["October","Ekim"],["November","Kasım"],["December","Aralık"]
+];
+
+const $ = id => document.getElementById(id);
+let order, idx, answers, locked;
+
+function shuffle(a){
+  a = a.slice();
+  for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
+  return a;
+}
+
+let timerId = null;
+
+function start(){
+  clearInterval(timerId);
+  $("result").classList.add("hidden");
+  $("game").classList.add("hidden");
+  $("study").classList.remove("hidden");
+  $("studyRows").innerHTML = MONTHS.map(m => `<tr><td>${m[1]}</td><td>${m[0]}</td></tr>`).join("");
+  let left = 10;
+  $("timer").textContent = left;
+  timerId = setInterval(() => {
+    left--;
+    $("timer").textContent = left;
+    if(left <= 0){ clearInterval(timerId); beginGame(); }
+  }, 1000);
+}
+
+function beginGame(){
+  order = shuffle(MONTHS.map((_,i)=>i));
+  idx = 0; answers = new Array(12).fill(null); locked = false;
+  $("study").classList.add("hidden");
+  $("game").classList.remove("hidden");
+  show();
+}
+
+function show(){
+  const m = MONTHS[order[idx]];
+  $("tr").textContent = m[1];
+  $("count").textContent = (idx+1) + " / 12";
+  $("bar").style.width = (idx/12*100) + "%";
+  $("answer").value = ""; $("answer").readOnly = false;
+  $("fb").className = "fb"; $("fb").textContent = "";
+  $("check").textContent = "Kontrol et";
+  locked = false;
+  $("answer").focus();
+}
+
+function check(){
+  if(locked){ // moving on
+    idx++;
+    if(idx === 12) return finish();
+    return show();
+  }
+  const i = order[idx];
+  const given = $("answer").value.trim();
+  if(!given){ $("answer").focus(); return; }
+  const right = MONTHS[i][0];
+  const ok = given.toLowerCase() === right.toLowerCase();
+  answers[i] = {given, ok};
+  const fb = $("fb");
+  if(ok){ fb.className = "fb ok"; fb.textContent = "✓ Doğru!"; }
+  else { fb.className = "fb bad"; fb.textContent = "✗ Yanlış. Doğrusu: " + right; }
+  $("answer").readOnly = true;
+  locked = true;
+  $("check").textContent = idx === 11 ? "Sonuçları gör" : "Sonraki";
+}
+
+function finish(){
+  $("game").classList.add("hidden");
+  $("result").classList.remove("hidden");
+  const total = answers.filter(a => a && a.ok).length;
+  $("score").textContent = total + " / 12 doğru";
+  const rows = $("rows"); rows.innerHTML = "";
+  MONTHS.forEach((m,i)=>{
+    const a = answers[i];
+    const tr = document.createElement("tr");
+    tr.className = a.ok ? "ok" : "bad";
+    const given = a.ok ? "" : a.given;
+    tr.innerHTML = `<td class="mark">${a.ok ? "✓" : "✗"}</td><td>${m[0]}</td><td>${m[1]}</td>` +
+      `<td>${a.ok ? "" : `<span class="yours"></span>`}</td>`;
+    if(!a.ok) tr.querySelector(".yours").textContent = given;
+    rows.appendChild(tr);
+  });
+  $("bar").style.width = "100%";
+}
+
+$("check").addEventListener("click", check);
+$("answer").addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); check(); } });
+$("again").addEventListener("click", start);
+start();
+</script>
+</body>
+</html>
